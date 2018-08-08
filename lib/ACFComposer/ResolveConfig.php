@@ -82,21 +82,26 @@ class ResolveConfig
      *
      * @return array Resolved config.
      */
-    protected static function forEntity($config, $requiredAttributes, $parentKeys = [], $prefix = null)
+    protected static function forEntity($config, $requiredAttributes, $parentKeys = [], $args = null)
     {
         if (is_string($config)) {
             $filterName = $config;
             $filterParts = explode('#', $filterName);
             if (isset($filterParts[1])) {
-                $prefix = $filterParts[1];
-                $config = apply_filters($filterParts[0], null, $prefix);
+                $args = explode(';', $filterParts[1]);
+                $config = apply_filters($filterParts[0], null, $args);
                 if (!self::isAssoc($config)) {
-                    $config = array_map(function ($singleConfig) use ($prefix) {
-                        $singleConfig['name'] = $prefix . '_' . $singleConfig['name'];
-                        return $singleConfig;
-                    }, $config);
+                    if (isset($filterParts[1])) {
+                        foreach ($args as $attribute) {
+                            list($attrKey, $attrValue) = array_pad(explode('=', $attribute, 2), 2, null);
+                            $config = array_map(function ($singleConfig) use ($attrKey, $attrValue) {
+                                $singleConfig[$attrKey] = $attrValue;
+                                return $singleConfig;
+                            }, $config);
+                        }
+                    }
                 } else {
-                    $config['name'] = $prefix . '_' . $config['name'];
+                    $config['name'] = $args . '_' . $config['name'];
                 }
             } else {
                 $config = apply_filters($filterName, null);
@@ -109,15 +114,15 @@ class ResolveConfig
             }
         }
         if (!self::isAssoc($config)) {
-            return array_map(function ($singleConfig) use ($requiredAttributes, $parentKeys, $prefix) {
-                return self::forEntity($singleConfig, $requiredAttributes, $parentKeys, $prefix);
+            return array_map(function ($singleConfig) use ($requiredAttributes, $parentKeys, $args) {
+                return self::forEntity($singleConfig, $requiredAttributes, $parentKeys, $args);
             }, $config);
         }
 
         $output = self::validateConfig($config, $requiredAttributes);
 
-        $parentKeysIncludingPrefix = isset($prefix) ? array_merge($parentKeys, [$prefix]) : $parentKeys;
-        $output = self::forConditionalLogic($output, $parentKeysIncludingPrefix);
+        $parentKeysIncludingArgs = isset($args) ? array_merge($parentKeys, [$args]) : $parentKeys;
+        $output = self::forConditionalLogic($output, $parentKeysIncludingArgs);
 
         array_push($parentKeys, $output['name']);
 
